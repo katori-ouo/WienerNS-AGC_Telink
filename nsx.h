@@ -15,30 +15,18 @@
  *
  */
 
-#ifndef NSX_H_
-#define NSX_H_
+#ifndef INNOTALK_NOISE_SUPRESSION_H_
+#define INNOTALK_NOISE_SUPRESSION_H_
 
+#include "audio_config.h"
 #include "signal_processing_library.h"
 
-#define  Q15MOD               32768
-#define  Q15MAX               32767
-#define  Q31MOD          2147483648
-#define  Q30MOD          1073741824
-
-#define CEVAOPT    0
-#define TelinkOPT  1
 #define CUT        0
 #define LIIROPT    0
 #define EngScaled  1
 #define FIRAVERAGE 0
 #define FSmooth    0
 
-#if CEVAOPT
-#include "./cevalib/CEVA_common.h"
-#include "./cevalib/ceva_typedef.h"
-#endif
-
-#if TelinkOPT
 #include <nds_basic_math.h>
 #include <nds_statistics_math.h>
 #include <nds_transform_math.h>
@@ -46,13 +34,6 @@
 #if (LIIROPT || FIRAVERAGE)
 #include <nds_filtering_math.h>
 #endif
-#endif
-
-#define FRAME_LEN               128 /* frame length */
-#define ANAL_BLOCKL_MAX         256 /* Max analysis block length */
-#define ANAL_BLOCKL_MAXD2       128 /* Max analysis block length */
-#define HALF_ANAL_BLOCKL        129 /* Half max analysis block length + 1 */
-#define END_STARTUP_LONG        200
 
 #define SMOOTH_APY16	22937  // 平滑功率谱的平滑因子0.7, Q15
 #define SMOOTH_APY16_S  9831   // Q15MOD - SMOOTH_APY16, Q15
@@ -132,4 +113,4 @@ int InnoTalkHpf_ProcessFloat(void* inst, short* inFrame, short* outFrame);
 }
 #endif
 
-#endif /* NSX_H_ */
+#endif /* INNOTALK_NOISE_SUPRESSION_H_ */
