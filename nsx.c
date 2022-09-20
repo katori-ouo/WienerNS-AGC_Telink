@@ -22,25 +22,7 @@
 
 #define max(a,b) (((a) > (b)) ? (a) : (b))
 
-#if CEVAOPT
-extern const int32_t CEVA_TL4_cos_sin_fft_32[512 * 2];
-extern const int32_t twi_table_32_rfft_256[64 * 2];
-
-int32_t fftftemp[ANAL_BLOCKL_MAX * 2];
-int32_t FFTIOt[ANAL_BLOCKL_MAX];
-int32_t bitrev[0x400 + 2];
-//void CEVA_TL4_vec_shf32_asm(I32 *inp, I16 shift_val, I16 size_buf, I32 *out);
-#endif
-
-// #include "./cevalib/CEVA_common.h"
-// #include "./cevalib/ceva_typedef.h"
-// extern const I32 CEVA_TL4_cos_sin_fft_32[512 * 2];
-// extern const I32 twi_table_32_rfft_256[64 * 2];
-// I32 bitrev[0x400 + 2];
-
-#if TelinkOPT
 int16_t FFTIOtT[ANAL_BLOCKL_MAX * 2];
-#endif
 
 const int32_t delta32[129] = {
   42598, 42598, 42598, 42598, 42598, 42598, 42598, 42598, 42598, 42598,
@@ -78,7 +60,6 @@ static int16_t kBlocks128w256x[256] = {
   4808,4410,4010,3612,3212,2812,2412,2008,1608,1206,802,404};
 
 
-#if TelinkOPT
 #if LIIROPT
 /**
  * @brief 为高通滤波器分配内存
@@ -206,7 +187,6 @@ int32_t InnoTalkSmooth_InitCore(void* inst1, int coeff_size)
   return 0;
 
 }
-#endif
 #endif
 
 #if FSmooth
@@ -366,19 +346,9 @@ uint64_t InnoTalk_Energy(int16_t* vector, uint32_t vector_length, int* scale_fac
 #else
 	int scaling = 0;
 #endif
-#if TelinkOPT
+
 	en = (uint64_t)nds_pwr_q15(vector,vector_length);
 	en = en >> scaling;
-#else
-	int i;
-	int looptimes = vector_length;
-	int16_t* vectorptr = vector;
-
-	for (i = 0; i < looptimes; i++)
-	{
-		en += ((int64_t)((uint32_t)vectorptr[i] * (uint32_t)vectorptr[i])) >> scaling;
-	}
-#endif
 	*scale_factor = scaling;
 	return en;
 }
@@ -394,24 +364,14 @@ void InnoTalkNsx_DataAnalysis(void *inst1, short* speechFrame) {
 	int i;
   int16_t maxWinData;
   int16_t winData[ANAL_BLOCKL_MAX]= { 0 }, realImag[ANAL_BLOCKL_MAX] = { 0 };
-#if TelinkOPT
   int16_t  DataAbs[ANAL_BLOCKL_MAX] = { 0 };
   uint32_t dataindex = 0;
-#endif
 
   nds_dup_q15(inst->analysisBuffer + inst->blockLen, inst->analysisBuffer, (uint32_t)(ANAL_BLOCKL_MAX - inst->blockLen));
   nds_dup_q15(speechFrame, inst->analysisBuffer + ANAL_BLOCKL_MAX - inst->blockLen, (uint32_t)inst->blockLen);
 
-#if TelinkOPT
   nds_mul_q15(kBlocks128w256x, inst->analysisBuffer, winData, (uint32_t)ANAL_BLOCKL_MAX);
   // nds_shift_q15(winData,1,winData,ANAL_BLOCKL_MAX);
-#else
-  for ( i = 0; i < ANAL_BLOCKL_MAX; i++)
-  {
-    // 这里的winData是浮点版本的四舍五入的结果.
-    winData[i] = ((int32_t)((int16_t)kBlocks128w256x[i] * (int16_t)inst->analysisBuffer[i]) + (int32_t)((int32_t)1 << (14 - 1))) >> 14;
-  }
-#endif
 #if EngScaled
   // Get input energy
   inst->energyIn = InnoTalk_Energy(winData, (uint32_t)ANAL_BLOCKL_MAX, &(inst->scaleEnergyIn));
@@ -419,12 +379,8 @@ void InnoTalkNsx_DataAnalysis(void *inst1, short* speechFrame) {
   // Reset zero input flag
   inst->zeroInputSignal = 0;
   // Acquire norm for winData
-#if TelinkOPT
   nds_abs_q15(winData, DataAbs, (uint32_t)ANAL_BLOCKL_MAX);
   maxWinData = nds_max_q15(DataAbs, (uint32_t)ANAL_BLOCKL_MAX, &dataindex);
-#else
-  maxWinData = CEVA_TL4_vec_max_abs16_asm(winData, ANAL_BLOCKL_MAX);
-#endif
   inst->norm = InnoTalkSpl_NormW16(maxWinData);
   if (maxWinData == 0) {
     // Treat zero input separately.
@@ -432,13 +388,8 @@ void InnoTalkNsx_DataAnalysis(void *inst1, short* speechFrame) {
     return;
   }
 
-#if TelinkOPT
   nds_shift_q15(winData, (int8_t)inst->norm, realImag, (uint32_t)ANAL_BLOCKL_MAX);
-#else
-  CEVA_TL4_vec_shf16_asm(winData, inst->norm, ANAL_BLOCKL_MAX, realImag);
-#endif
 
-#if TelinkOPT
   for (i = 0; i < ANAL_BLOCKL_MAX; i++)
   {
 	  FFTIOtT[2 * i] = realImag[i];
@@ -447,20 +398,6 @@ void InnoTalkNsx_DataAnalysis(void *inst1, short* speechFrame) {
   nds_cfft_rd4_q15(FFTIOtT, inst->stages);
   nds_dup_q15(FFTIOtT, inst->fftdata, (uint32_t)(2 * ANAL_BLOCKL_MAX));
   // nds_shift_q15(FFTIOtT, 1, inst->fftdata, 2 * ANAL_BLOCKL_MAX);
-#else
-  for (i = 0; i < ANAL_BLOCKL_MAX; i++)
-  {
-	  FFTIOt[i] = (int32_t)realImag[i];
-	  //FFTIOt[i] = (int32_t)winData[i];		//不用移位的数据
-  }
-
-  CEVA_TL4_fft_real_32_asm((int32_t)inst->stages, FFTIOt, fftftemp, CEVA_TL4_cos_sin_fft_32, twi_table_32_rfft_256, bitrev, (int32_t)1);
-
-  for (i = 0; i < ANAL_BLOCKL_MAX * 2; i++)
-  {
-	  inst->fftdata[i] = (int16_t)(fftftemp[i] >> inst->stages);
-  }
-#endif
 }
 
 /**
@@ -507,7 +444,7 @@ int InnoTalkNsx_ProcessCore(void* inst1, short* speechFrame, short* outFrame) {
     int32_t  winLen;
     MovingAverage* smooth;
 #endif
-#if (TelinkOPT && FIRAVERAGE)
+#if (FIRAVERAGE)
     void * smooth_inst = NULL;
 #endif
 
@@ -750,7 +687,6 @@ int InnoTalkNsx_ProcessCore(void* inst1, short* speechFrame, short* outFrame) {
     nds_mul_q15(inst->smooth32, real16, real16, (uint32_t)HALF_ANAL_BLOCKL);
     nds_mul_q15(inst->smooth32, imag16, imag16, (uint32_t)HALF_ANAL_BLOCKL);
 
-#if TelinkOPT
   winDataI[0] = real16[0];
   winDataI[1] = imag16[0];
   winDataI[ANAL_BLOCKL_MAX] = real16[HALF_ANAL_BLOCKL - 1];
@@ -772,34 +708,6 @@ int InnoTalkNsx_ProcessCore(void* inst1, short* speechFrame, short* outFrame) {
 	  winDataO[i] = winDataI[i * 2];
   }
   nds_shift_q15(winDataO, (int8_t)(-inst->norm), winDataO, (uint32_t)ANAL_BLOCKL_MAX);
-
-  // winDataI[0] = (int32_t)(real16[0]) << 1;
-  // winDataI[1] = 0;
-  // winDataI[ANAL_BLOCKL_MAX] = (int32_t)(real16[HALF_ANAL_BLOCKL - 1]) << 1;
-  // winDataI[ANAL_BLOCKL_MAX + 1] = 0;
-  // for (i = 1; i < HALF_ANAL_BLOCKL - 1; i++) {
-  //   winDataI[2 * i] = (int32_t)(real16[i]) << 1;
-  //   winDataI[2 * i + 1] = (int32_t)(imag16[i]) << 1;
-  // }
-  // CEVA_TL4_fft_real_inv_32_asm((int32_t)inst->stages, winDataI, winDataTmp, CEVA_TL4_cos_sin_fft_32, twi_table_32_rfft_256, bitrev, (int32_t)1);
-  // nds_shift_q31(winDataTmp, -inst->norm, winDataTmp, ANAL_BLOCKL_MAX);
-  // for (i = 0; i < ANAL_BLOCKL_MAX; i++)
-  // {
-  //   winDataO[i] = (int16_t)winDataTmp[i];
-  // }
-
-#else
-    winDataI[0] = (int32_t)(real16[0]) << 1;
-    winDataI[1] = 0;
-    winDataI[ANAL_BLOCKL_MAX] = (int32_t)(real16[HALF_ANAL_BLOCKL - 1]) << 1;
-    winDataI[ANAL_BLOCKL_MAX + 1] = 0;
-    for (i = 1; i < HALF_ANAL_BLOCKL - 1; i++) {
-      winDataI[2 * i] = (int32_t)(real16[i])<<1;
-      winDataI[2 * i + 1] = (int32_t)(imag16[i])<<1;
-    }
-    CEVA_TL4_fft_real_inv_32_asm((int32_t)inst->stages, winDataI, winDataO, CEVA_TL4_cos_sin_fft_32, twi_table_32_rfft_256, bitrev, (int32_t)1);
-    CEVA_TL4_vec_shf32_asm(winDataO, -inst->norm, ANAL_BLOCKL_MAX, winDataO);
-#endif
 
     factor32 = Q15MOD;
     if (inst->blockIndex > 0) {

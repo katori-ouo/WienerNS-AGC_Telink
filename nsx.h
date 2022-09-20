@@ -25,27 +25,18 @@
 #define  Q31MOD          2147483648
 #define  Q30MOD          1073741824
 
-#define CEVAOPT    0
-#define TelinkOPT  1
 #define CUT        0
 #define LIIROPT    0
 #define EngScaled  1
 #define FIRAVERAGE 0
 #define FSmooth    0
 
-#if CEVAOPT
-#include "./cevalib/CEVA_common.h"
-#include "./cevalib/ceva_typedef.h"
-#endif
-
-#if TelinkOPT
 #include <nds_basic_math.h>
 #include <nds_statistics_math.h>
 #include <nds_transform_math.h>
 #include <nds_utils_math.h>
 #if (LIIROPT || FIRAVERAGE)
 #include <nds_filtering_math.h>
-#endif
 #endif
 
 #define FRAME_LEN               128 /* frame length */
