@@ -20,8 +20,6 @@
 #include <string.h>
 #include "nsx.h"
 
-#define max(a,b) (((a) > (b)) ? (a) : (b))
-
 int16_t FFTIOtT[ANAL_BLOCKL_MAX * 2];
 
 const int32_t delta32[129] = {
@@ -359,11 +357,12 @@ uint64_t InnoTalk_Energy(int16_t* vector, uint32_t vector_length, int* scale_fac
  * @param inst1 ns结构体的指针
  * @param speechFrame 输入的一帧信号
  */
-void InnoTalkNsx_DataAnalysis(void *inst1, short* speechFrame) {
+void InnoTalkNsx_DataAnalysis(void *inst1, short* speechFrame)
+{
 	NsxInst_t* inst = (NsxInst_t *)inst1;
 	int i;
-  int16_t maxWinData;
-  int16_t winData[ANAL_BLOCKL_MAX]= { 0 }, realImag[ANAL_BLOCKL_MAX] = { 0 };
+  int16_t  maxWinData;
+  int16_t  winData[ANAL_BLOCKL_MAX]= { 0 }, realImag[ANAL_BLOCKL_MAX] = { 0 };
   int16_t  DataAbs[ANAL_BLOCKL_MAX] = { 0 };
   uint32_t dataindex = 0;
 
@@ -408,284 +407,281 @@ void InnoTalkNsx_DataAnalysis(void *inst1, short* speechFrame) {
  * @param outFrame 输出的short型一帧降噪后信号
  * @return int 降噪失败返回-1, 否则返回0
  */
-int InnoTalkNsx_ProcessCore(void* inst1, short* speechFrame, short* outFrame) {
+int InnoTalkNsx_ProcessCore(void* inst1, short* speechFrame, short* outFrame)
+{
+  // main routine for noise suppression
+  NsxInst_t* inst = (NsxInst_t *)inst1;
+  if (inst->initFlag != 1) {
+    return -1;
+  }
 
-    // main routine for noise suppression
-    NsxInst_t* inst = (NsxInst_t *)inst1;
-    if (inst->initFlag != 1) {
-      return -1;
-    }
+  int i;
+  int16_t  dTmp, Qdiff;
+  int32_t  fTmp32;
+  int64_t  tempdata64;
+  int32_t  vecTmp32_1[HALF_ANAL_BLOCKL], vecTmp32_2[HALF_ANAL_BLOCKL];
+  int16_t  vecTmp16_1[HALF_ANAL_BLOCKL], vecTmp16_2[HALF_ANAL_BLOCKL];
 
-
-    int i;
-    int16_t  dTmp, Qdiff;
-    int32_t  fTmp32;
-    int64_t  tempdata64;
-    int32_t  vecTmp32_1[HALF_ANAL_BLOCKL], vecTmp32_2[HALF_ANAL_BLOCKL];
-    int16_t  vecTmp16_1[HALF_ANAL_BLOCKL], vecTmp16_2[HALF_ANAL_BLOCKL];
-
-    // int32_t  winDataI[HALF_ANAL_BLOCKL * 2];
-    // int32_t  winDataTmp[ANAL_BLOCKL_MAX];
-    int16_t  winDataI[ANAL_BLOCKL_MAX * 2];
-    int16_t  winDataO[ANAL_BLOCKL_MAX];
-    int16_t  real16[HALF_ANAL_BLOCKL],imag16[HALF_ANAL_BLOCKL];
-    int32_t  magn32[HALF_ANAL_BLOCKL], noise32[HALF_ANAL_BLOCKL], pmagn32[HALF_ANAL_BLOCKL];
-    int64_t  snrLocPost32[HALF_ANAL_BLOCKL] = { 0 };
-    int64_t  snrLocPrior32[HALF_ANAL_BLOCKL] = { 0 };
-    int32_t  probSpeechFinal32[HALF_ANAL_BLOCKL] = { 0 }; /* Q15 */
-    int32_t  ii32[HALF_ANAL_BLOCKL] = {0}; /* Q15 */
-    int16_t  theFilter32[HALF_ANAL_BLOCKL];
-    int32_t  pr32[HALF_ANAL_BLOCKL] = {0}, afa32[HALF_ANAL_BLOCKL] = { 0 }; /* Q15 */
-    int32_t  factor32, gain32;
-    uint64_t energyOut;
+  // int32_t  winDataI[HALF_ANAL_BLOCKL * 2];
+  // int32_t  winDataTmp[ANAL_BLOCKL_MAX];
+  int16_t  winDataI[ANAL_BLOCKL_MAX * 2];
+  int16_t  winDataO[ANAL_BLOCKL_MAX];
+  int16_t  real16[HALF_ANAL_BLOCKL],imag16[HALF_ANAL_BLOCKL];
+  int32_t  magn32[HALF_ANAL_BLOCKL], noise32[HALF_ANAL_BLOCKL], pmagn32[HALF_ANAL_BLOCKL];
+  int64_t  snrLocPost32[HALF_ANAL_BLOCKL] = { 0 };
+  int64_t  snrLocPrior32[HALF_ANAL_BLOCKL] = { 0 };
+  int32_t  probSpeechFinal32[HALF_ANAL_BLOCKL] = { 0 }; /* Q15 */
+  int32_t  ii32[HALF_ANAL_BLOCKL] = {0}; /* Q15 */
+  int16_t  theFilter32[HALF_ANAL_BLOCKL];
+  int32_t  pr32[HALF_ANAL_BLOCKL] = {0}, afa32[HALF_ANAL_BLOCKL] = { 0 }; /* Q15 */
+  int32_t  factor32, gain32;
+  uint64_t energyOut;
 #if FSmooth
-    uint64_t fenergy1, fenergy2;
-    int32_t  zeta;
-    int32_t  winLen;
-    MovingAverage* smooth;
+  uint64_t fenergy1, fenergy2;
+  int32_t  zeta;
+  int32_t  winLen;
+  MovingAverage* smooth;
 #endif
 #if (FIRAVERAGE)
-    void * smooth_inst = NULL;
+  void * smooth_inst = NULL;
 #endif
 
-    // Store speechFrame and transform to frequency domain
-    InnoTalkNsx_DataAnalysis(inst, speechFrame);
-    Qdiff = 2 * (inst->norm - inst->normPrev);
+  // Store speechFrame and transform to frequency domain
+  InnoTalkNsx_DataAnalysis(inst, speechFrame);
+  Qdiff = 2 * (inst->norm - inst->normPrev);
 
-    if (inst->zeroInputSignal) {
-      // synthesize the special case of zero input
-      // read out fully processed segment
-      nds_dup_q15(inst->synthesisBuffer, outFrame, (uint32_t)inst->blockLen);
-      // update synthesis buffer
-      nds_dup_q15(inst->synthesisBuffer + inst->blockLen, inst->synthesisBuffer, (uint32_t)(ANAL_BLOCKL_MAX - inst->blockLen));
-      nds_set_q15((int16_t)0, inst->synthesisBuffer + ANAL_BLOCKL_MAX - inst->blockLen, (uint32_t)inst->blockLen);
+  if (inst->zeroInputSignal) {
+    // synthesize the special case of zero input
+    // read out fully processed segment
+    nds_dup_q15(inst->synthesisBuffer, outFrame, (uint32_t)inst->blockLen);
+    // update synthesis buffer
+    nds_dup_q15(inst->synthesisBuffer + inst->blockLen, inst->synthesisBuffer, (uint32_t)(ANAL_BLOCKL_MAX - inst->blockLen));
+    nds_set_q15((int16_t)0, inst->synthesisBuffer + ANAL_BLOCKL_MAX - inst->blockLen, (uint32_t)inst->blockLen);
+    return 0;
+  }
 
-      return 0;
-    }
+  inst->blockIndex++; // Update the block index only when we process a block.
 
-    inst->blockIndex++; // Update the block index only when we process a block.
+  // Q(norm)
+  imag16[0] = inst->fftdata[1];
+  real16[0] = inst->fftdata[0];
+  imag16[HALF_ANAL_BLOCKL - 1] = inst->fftdata[ANAL_BLOCKL_MAX + 1];
+  real16[HALF_ANAL_BLOCKL - 1] = inst->fftdata[ANAL_BLOCKL_MAX];
+  // Q(2 * norm)
+  magn32[0] = (int32_t)(real16[0] * real16[0]);
+  magn32[HALF_ANAL_BLOCKL - 1] = (int32_t)(real16[HALF_ANAL_BLOCKL - 1] * real16[HALF_ANAL_BLOCKL - 1]);
+  // 计算输入的频域能量, Q(2 * norm)
+#if FSmooth
+  fenergy1 = (uint64_t)magn32[0];
+  fenergy1 += (uint64_t)magn32[HALF_ANAL_BLOCKL - 1];
+#endif
 
+  for (i = 1; i < HALF_ANAL_BLOCKL - 1; i++)
+  {
     // Q(norm)
-    imag16[0] = inst->fftdata[1];
-    real16[0] = inst->fftdata[0];
-    imag16[HALF_ANAL_BLOCKL - 1] = inst->fftdata[ANAL_BLOCKL_MAX + 1];
-    real16[HALF_ANAL_BLOCKL - 1] = inst->fftdata[ANAL_BLOCKL_MAX];
+    real16[i] = inst->fftdata[2 * i];
+    imag16[i] = inst->fftdata[2 * i + 1];
     // Q(2 * norm)
-    magn32[0] = (int32_t)(real16[0] * real16[0]);
-    magn32[HALF_ANAL_BLOCKL - 1] = (int32_t)(real16[HALF_ANAL_BLOCKL - 1] * real16[HALF_ANAL_BLOCKL - 1]);
-    // 计算输入的频域能量, Q(2 * norm)
+    fTmp32 = (int32_t)(real16[i] * real16[i]);
+    fTmp32 += (int32_t)(imag16[i] * imag16[i]);
+    magn32[i] = fTmp32;
 #if FSmooth
-    fenergy1 = (uint64_t)magn32[0];
-    fenergy1 += (uint64_t)magn32[HALF_ANAL_BLOCKL - 1];
+    fenergy1 += (uint64_t)magn32[i];
 #endif
+  }
 
-    for (i = 1; i < HALF_ANAL_BLOCKL - 1; i++)
+  // 如果是第一帧
+  if (inst->blockIndex == 0)
+  {
+    nds_dup_q31(magn32, pmagn32, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_dup_q31(magn32, inst->minMagn32, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_dup_q31(magn32, noise32, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_set_q31((int32_t)0, probSpeechFinal32, (uint32_t)HALF_ANAL_BLOCKL);
+  }
+  else
+  // 非首帧
+  {
+    // norm < normPrev, 当前帧的magn右移位数更多, 则把上一帧数据再右移
+    if (Qdiff < 0)
     {
-      // Q(norm)
-      real16[i] = inst->fftdata[2 * i];
-      imag16[i] = inst->fftdata[2 * i + 1];
-      // Q(2 * norm)
-      fTmp32 = (int32_t)(real16[i] * real16[i]);
-      fTmp32 += (int32_t)(imag16[i] * imag16[i]);
-      magn32[i] = fTmp32;
-#if FSmooth
-      fenergy1 += (uint64_t)magn32[i];
-#endif
+      nds_shift_q31(inst->pmagnPrev32, (int8_t)Qdiff, inst->pmagnPrev32, (uint32_t)HALF_ANAL_BLOCKL); //Q(2*norm)
+      nds_shift_q31(inst->minMagn32, (int8_t)Qdiff, inst->minMagn32, (uint32_t)HALF_ANAL_BLOCKL); //Q(2*norm)
+      nds_shift_q31(inst->noisePrev32, (int8_t)Qdiff, inst->noisePrev32, (uint32_t)HALF_ANAL_BLOCKL); //Q(2*norm)
+      nds_shift_q31(inst->signalPrev32, (int8_t)Qdiff, inst->signalPrev32, (uint32_t)HALF_ANAL_BLOCKL); //Q(2*norm)
+    }
+    // norm > normPrev, 上一帧帧的magn右移位数更多, 则把当前帧数据再右移
+    else if (Qdiff > 0) // norm > normPrev, 转到normPrev
+    {
+      nds_shift_q31(magn32, (int8_t)(-Qdiff), magn32, (uint32_t)HALF_ANAL_BLOCKL);
     }
 
-    // 如果是第一帧
-    if (inst->blockIndex == 0)
+    // 1. 平滑功率谱, 对应原理中最小值统计估噪的第(1)步即公式(1)
+    nds_scale_q31(inst->pmagnPrev32, (int32_t)SMOOTH_APY16, (int8_t)16, vecTmp32_1, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_scale_q31(magn32, (int32_t)SMOOTH_APY16_S, (int8_t)16, vecTmp32_2, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_add_q31(vecTmp32_1, vecTmp32_2, pmagn32, (uint32_t)HALF_ANAL_BLOCKL);
+ 	  for (i = 0; i < HALF_ANAL_BLOCKL; i++)
+  	{
+  	  // // 1.平滑功率谱 对应原理中最小值统计估噪的第(1)步即公式(1)
+  	  // tempdata64 = (int64_t)(SMOOTH_APY16 * (int64_t)inst->pmagnPrev32[i]) + (int64_t)(SMOOTH_APY16_S * (int64_t)magn32[i]); //Q(min + 15)
+  	  // pmagn32[i] = (int32_t)(tempdata64 >> 15); //Q(min)
+
+
+      // 2.搜索频带最小值 对应原理中最小值统计估噪的第(2)步
+  	  if (inst->minMagn32[i] < pmagn32[i])
+  	  {
+        tempdata64 = (int64_t)(SMOOTH_R16 * (int64_t)inst->minMagn32[i]) + (int64_t)(1638 * ((int64_t)pmagn32[i] - (((int64_t)(SMOOTH_BETA16 * (int64_t)inst->pmagnPrev32[i])) >> 15))); //Q(min + 15)
+        inst->minMagn32[i] = (int32_t)(tempdata64 >> 15); //Q(min)
+      }
+  	  else
+  		{
+  	    inst->minMagn32[i] = pmagn32[i]; //Q(min)
+  		}
+
+      // 3.判断是否存在语音 对应原理中最小值统计估噪的第(3)步
+  		if (inst->minMagn32[i] <= 0)
+  		{
+  		  pr32[i] = delta32[i] + Q15MOD;
+  		}
+  		else
+  		{
+  		  pr32[i] = (((int64_t)pmagn32[i]) << 15) / inst->minMagn32[i];
+  		}
+  		if (pr32[i] > delta32[i])
+  		{
+  		  ii32[i] = (int32_t)Q15MOD;
+  		}
+  		else
+  		{
+  		  ii32[i] = 0;
+  		}
+
+  		// // 4.计算语音出现的概率 对应原理中最小值统计估噪的第(4)步
+      // tempdata64 = (int64_t)AP16 * inst->probPrev32[i] + (int32_t)(AP16_S) * ii32[i]; // Q15 * Q15
+      // probSpeechFinal32[i] = (int32_t)(tempdata64 >> 15); // Q15
+  	}
+
+    // 4.计算语音出现的概率 对应原理中最小值统计估噪的第(4)步
+    nds_scale_q31(inst->probPrev32, (int32_t)AP16, (int8_t)16, vecTmp32_1, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_scale_q31(ii32, (int32_t)AP16_S, (int8_t)16, vecTmp32_2, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_add_q31(vecTmp32_1, vecTmp32_2, probSpeechFinal32, (uint32_t)HALF_ANAL_BLOCKL);
+
+    // 5.噪声谱估计,对应原理中最小值统计估噪的第(5)步:
+    if (inst->blockIndex < 7)
     {
-      nds_dup_q31(magn32, pmagn32, (uint32_t)HALF_ANAL_BLOCKL);
-      nds_dup_q31(magn32, inst->minMagn32, (uint32_t)HALF_ANAL_BLOCKL);
       nds_dup_q31(magn32, noise32, (uint32_t)HALF_ANAL_BLOCKL);
-      nds_set_q31((int32_t)0, probSpeechFinal32, (uint32_t)HALF_ANAL_BLOCKL);
     }
     else
-    // 非首帧
     {
-      // norm < normPrev, 当前帧的magn右移位数更多, 则把上一帧数据再右移
-      if (Qdiff < 0)
+      for (i = 0; i < HALF_ANAL_BLOCKL; i++)
       {
-        nds_shift_q31(inst->pmagnPrev32, (int8_t)Qdiff, inst->pmagnPrev32, (uint32_t)HALF_ANAL_BLOCKL); //Q(2*norm)
-        nds_shift_q31(inst->minMagn32, (int8_t)Qdiff, inst->minMagn32, (uint32_t)HALF_ANAL_BLOCKL); //Q(2*norm)
-        nds_shift_q31(inst->noisePrev32, (int8_t)Qdiff, inst->noisePrev32, (uint32_t)HALF_ANAL_BLOCKL); //Q(2*norm)
-        nds_shift_q31(inst->signalPrev32, (int8_t)Qdiff, inst->signalPrev32, (uint32_t)HALF_ANAL_BLOCKL); //Q(2*norm)
+        tempdata64 = (int64_t)G16 * probSpeechFinal32[i] + (int64_t)966367641;//(0.9) * Q30MOD
+        afa32[i] = (int32_t)(tempdata64 >> 15); //Q15
+        tempdata64 = (int64_t)(afa32[i] * (int64_t)inst->noisePrev32[i]) + (int64_t)(Q15MOD - afa32[i]) * (int64_t)magn32[i]; // Q(min + 15)
+        noise32[i] = (int32_t)(tempdata64 >> 15);  //Q(min)
       }
-      // norm > normPrev, 上一帧帧的magn右移位数更多, 则把当前帧数据再右移
-      else if (Qdiff > 0) // norm > normPrev, 转到normPrev
+      // nds_scale_q31(probSpeechFinal32, (int32_t)G16, (int8_t)16, Vectmp1, (uint32_t)HALF_ANAL_BLOCKL);
+      // nds_offset_q31(Vectmp1, (int32_t)G16_S, afa32, (uint32_t)HALF_ANAL_BLOCKL);
+      // nds_neg_q31(afa32, Vectmp2, (uint32_t)HALF_ANAL_BLOCKL);
+      // nds_offset_q31(Vectmp2, (int32_t)Q15MOD, Vectmp2, (uint32_t)HALF_ANAL_BLOCKL);
+      // nds_mul_q31(afa32, inst->noisePrev32, Vectmp1, (uint32_t)HALF_ANAL_BLOCKL);
+      // nds_mul_q31(Vectmp2, magn32, Vectmp2, (uint32_t)HALF_ANAL_BLOCKL);
+      // nds_add_q31(Vectmp1, Vectmp2, noise32, (uint32_t)HALF_ANAL_BLOCKL);
+    }
+  }
+
+  // 将当前帧的值赋给前一帧
+  nds_dup_q31(probSpeechFinal32, inst->probPrev32, (uint32_t)HALF_ANAL_BLOCKL);
+  if (Qdiff < 0)
+  {
+    nds_dup_q31(pmagn32, inst->pmagnPrev32, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_dup_q31(noise32, inst->noisePrev32, (uint32_t)HALF_ANAL_BLOCKL);
+  }
+  else
+  {
+    nds_shift_q31(pmagn32, (int8_t)Qdiff, inst->pmagnPrev32, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_shift_q31(noise32, (int8_t)Qdiff, inst->noisePrev32,(uint32_t)HALF_ANAL_BLOCKL);
+    nds_shift_q31(inst->minMagn32, (int8_t)Qdiff, inst->minMagn32, (uint32_t)HALF_ANAL_BLOCKL);
+  }
+  inst->normPrev = inst->norm;
+
+  // 6. 计算先验/后验信噪比和维纳滤波器
+  if (inst->blockIndex == 0)
+  {
+    nds_set_q15((int16_t)13919, theFilter32, (uint32_t)HALF_ANAL_BLOCKL);
+    nds_scale_q31(magn32, (int32_t)5912,(int8_t)16, inst->signalPrev32, (uint32_t)HALF_ANAL_BLOCKL);
+  }
+  else
+  {
+    for ( i = 0; i < HALF_ANAL_BLOCKL; i++)
+    {
+      if (noise32[i] == 0)
       {
-    	  nds_shift_q31(magn32, (int8_t)(-Qdiff), magn32, (uint32_t)HALF_ANAL_BLOCKL);
-      }
-
-      // 1. 平滑功率谱, 对应原理中最小值统计估噪的第(1)步即公式(1)
-      nds_scale_q31(inst->pmagnPrev32, (int32_t)SMOOTH_APY16, (int8_t)16, vecTmp32_1, (uint32_t)HALF_ANAL_BLOCKL);
-      nds_scale_q31(magn32, (int32_t)SMOOTH_APY16_S, (int8_t)16, vecTmp32_2, (uint32_t)HALF_ANAL_BLOCKL);
-      nds_add_q31(vecTmp32_1, vecTmp32_2, pmagn32, (uint32_t)HALF_ANAL_BLOCKL);
-
-  	  for (i = 0; i < HALF_ANAL_BLOCKL; i++)
-  	  {
-  		  // // 1.平滑功率谱 对应原理中最小值统计估噪的第(1)步即公式(1)
-  		  // tempdata64 = (int64_t)(SMOOTH_APY16 * (int64_t)inst->pmagnPrev32[i]) + (int64_t)(SMOOTH_APY16_S * (int64_t)magn32[i]); //Q(min + 15)
-  		  // pmagn32[i] = (int32_t)(tempdata64 >> 15); //Q(min)
-
-
-        // 2.搜索频带最小值 对应原理中最小值统计估噪的第(2)步
-  		  if (inst->minMagn32[i] < pmagn32[i])
-  		  {
-          tempdata64 = (int64_t)(SMOOTH_R16 * (int64_t)inst->minMagn32[i]) + (int64_t)(1638 * ((int64_t)pmagn32[i] - (((int64_t)(SMOOTH_BETA16 * (int64_t)inst->pmagnPrev32[i])) >> 15))); //Q(min + 15)
-          inst->minMagn32[i] = (int32_t)(tempdata64 >> 15); //Q(min)
-        }
-  		  else
-  		  {
-  	      inst->minMagn32[i] = pmagn32[i]; //Q(min)
-  		  }
-
-        // 3.判断是否存在语音 对应原理中最小值统计估噪的第(3)步
-  		  if (inst->minMagn32[i] <= 0)
-  		  {
-  		    pr32[i] = delta32[i] + Q15MOD;
-  		  }
-  		  else
-  		  {
-  		    pr32[i] = (((int64_t)pmagn32[i]) << 15) / inst->minMagn32[i];
-  		  }
-  		  if (pr32[i] > delta32[i])
-  		  {
-  		    ii32[i] = (int32_t)Q15MOD;
-  		  }
-  		  else
-  		  {
-  		    ii32[i] = 0;
-  		  }
-
-  		  // // 4.计算语音出现的概率 对应原理中最小值统计估噪的第(4)步
-        // tempdata64 = (int64_t)AP16 * inst->probPrev32[i] + (int32_t)(AP16_S) * ii32[i]; // Q15 * Q15
-        // probSpeechFinal32[i] = (int32_t)(tempdata64 >> 15); // Q15
-  	  }
-
-      // 4.计算语音出现的概率 对应原理中最小值统计估噪的第(4)步
-      nds_scale_q31(inst->probPrev32, (int32_t)AP16, (int8_t)16, vecTmp32_1, (uint32_t)HALF_ANAL_BLOCKL);
-      nds_scale_q31(ii32, (int32_t)AP16_S, (int8_t)16, vecTmp32_2, (uint32_t)HALF_ANAL_BLOCKL);
-      nds_add_q31(vecTmp32_1, vecTmp32_2, probSpeechFinal32, (uint32_t)HALF_ANAL_BLOCKL);
-
-      // 5.噪声谱估计,对应原理中最小值统计估噪的第(5)步:
-      if (inst->blockIndex < 7)
-      {
-        nds_dup_q31(magn32, noise32, (uint32_t)HALF_ANAL_BLOCKL);
+        theFilter32[i] = (int16_t)13757;
       }
       else
       {
-        for (i = 0; i < HALF_ANAL_BLOCKL; i++)
+        snrLocPost32[i] = magn32[i]; //Q(min)
+        tempdata64 = (int64_t)(AF16_S) * INNOTALK_SPL_MAX((int32_t)snrLocPost32[i] - (int32_t)noise32[i], 0); //Q(min + 15)
+        snrLocPrior32[i] = (int64_t)(AF16 * (int64_t)inst->signalPrev32[i]) + tempdata64; //Q(min + 15)
+        tempdata64 = (int64_t)inst->overdrive16 * noise32[i]; //Q(min + 15)
+        theFilter32[i] = ((int64_t)snrLocPrior32[i] * Q15MOD) / (tempdata64 + snrLocPrior32[i]); //Q((min + 30) - (min + 15)) = Q15
+        if (theFilter32[i] > TMPVALUE)
         {
-          tempdata64 = (int64_t)G16 * probSpeechFinal32[i] + (int64_t)966367641;//(0.9) * Q30MOD
-          afa32[i] = (int32_t)(tempdata64 >> 15); //Q15
-          tempdata64 = (int64_t)(afa32[i] * (int64_t)inst->noisePrev32[i]) + (int64_t)(Q15MOD - afa32[i]) * (int64_t)magn32[i]; // Q(min + 15)
-          noise32[i] = (int32_t)(tempdata64 >> 15);  //Q(min)
+          theFilter32[i] = TMPVALUE;
         }
-        // nds_scale_q31(probSpeechFinal32, (int32_t)G16, (int8_t)16, Vectmp1, (uint32_t)HALF_ANAL_BLOCKL);
-        // nds_offset_q31(Vectmp1, (int32_t)G16_S, afa32, (uint32_t)HALF_ANAL_BLOCKL);
-        // nds_neg_q31(afa32, Vectmp2, (uint32_t)HALF_ANAL_BLOCKL);
-        // nds_offset_q31(Vectmp2, (int32_t)Q15MOD, Vectmp2, (uint32_t)HALF_ANAL_BLOCKL);
-        // nds_mul_q31(afa32, inst->noisePrev32, Vectmp1, (uint32_t)HALF_ANAL_BLOCKL);
-        // nds_mul_q31(Vectmp2, magn32, Vectmp2, (uint32_t)HALF_ANAL_BLOCKL);
-        // nds_add_q31(Vectmp1, Vectmp2, noise32, (uint32_t)HALF_ANAL_BLOCKL);
+        if (theFilter32[i] < inst->denoiseBound16)
+        {
+          theFilter32[i] = inst->denoiseBound16;
+        }
       }
+      tempdata64 = ((int64_t)(((int64_t)magn32[i] * (int64_t)theFilter32[i]) >> 15)); // Q(min + 15 - 15)
+      inst->signalPrev32[i] = (int32_t)(((int64_t)theFilter32[i] * tempdata64) >> 15);  // Q(min + 15 - 15)
     }
+  }
 
-    // 将当前帧的值赋给前一帧
-    nds_dup_q31(probSpeechFinal32, inst->probPrev32, (uint32_t)HALF_ANAL_BLOCKL);
-    if (Qdiff < 0)
-    {
-      nds_dup_q31(pmagn32, inst->pmagnPrev32, (uint32_t)HALF_ANAL_BLOCKL);
-      nds_dup_q31(noise32, inst->noisePrev32, (uint32_t)HALF_ANAL_BLOCKL);
-    }
-    else
-    {
-      nds_shift_q31(pmagn32, (int8_t)Qdiff, inst->pmagnPrev32, (uint32_t)HALF_ANAL_BLOCKL);
-      nds_shift_q31(noise32, (int8_t)Qdiff, inst->noisePrev32,(uint32_t)HALF_ANAL_BLOCKL);
-      nds_shift_q31(inst->minMagn32, (int8_t)Qdiff, inst->minMagn32, (uint32_t)HALF_ANAL_BLOCKL);
-    }
-    inst->normPrev = inst->norm;
+  if (Qdiff > 0)
+  {
+  	nds_shift_q31(inst->signalPrev32, (int8_t)Qdiff, inst->signalPrev32, (uint32_t)HALF_ANAL_BLOCKL);
+  }
 
-    // 6. 计算先验/后验信噪比和维纳滤波器
-    if (inst->blockIndex == 0)
-    {
-      nds_set_q15((int16_t)13919, theFilter32, (uint32_t)HALF_ANAL_BLOCKL);
-      nds_scale_q31(magn32, (int32_t)5912,(int8_t)16, inst->signalPrev32, (uint32_t)HALF_ANAL_BLOCKL);
-    }
-    else
-    {
-      for ( i = 0; i < HALF_ANAL_BLOCKL; i++)
-      {
-        if (noise32[i] == 0)
-        {
-          theFilter32[i] = (int16_t)13757;
-        }
-        else
-        {
-          snrLocPost32[i] = magn32[i]; //Q(min)
-          tempdata64 = (int64_t)(AF16_S) * max((int32_t)snrLocPost32[i] - (int32_t)noise32[i], 0); //Q(min + 15)
-          snrLocPrior32[i] = (int64_t)(AF16 * (int64_t)inst->signalPrev32[i]) + tempdata64; //Q(min + 15)
-          tempdata64 = (int64_t)inst->overdrive16 * noise32[i]; //Q(min + 15)
-          theFilter32[i] = ((int64_t)snrLocPrior32[i] * Q15MOD) / (tempdata64 + snrLocPrior32[i]); //Q((min + 30) - (min + 15)) = Q15
-          if (theFilter32[i] > TMPVALUE)
-          {
-            theFilter32[i] = TMPVALUE;
-          }
-          if (theFilter32[i] < inst->denoiseBound16)
-          {
-            theFilter32[i] = inst->denoiseBound16;
-          }
-        }
-        tempdata64 = ((int64_t)(((int64_t)magn32[i] * (int64_t)theFilter32[i]) >> 15)); // Q(min + 15 - 15)
-        inst->signalPrev32[i] = (int32_t)(((int64_t)theFilter32[i] * tempdata64) >> 15);  // Q(min + 15 - 15)
-      }
-    }
-
-    if (Qdiff > 0)
-    {
-    	nds_shift_q31(inst->signalPrev32, (int8_t)Qdiff, inst->signalPrev32, (uint32_t)HALF_ANAL_BLOCKL);
-    }
-
-    // 7. 抑制水声
-    nds_scale_q15(inst->smooth32, (int16_t)FILTER_SMOOTH, (int8_t)0, vecTmp16_1, (uint32_t)HALF_ANAL_BLOCKL);
-    nds_scale_q15(theFilter32, (int16_t)FILTER_SMOOTH_S, (int8_t)0, vecTmp16_2, (uint32_t)HALF_ANAL_BLOCKL);
-    nds_add_q15(vecTmp16_1, vecTmp16_2, inst->smooth32, (uint32_t)HALF_ANAL_BLOCKL);
+  // 7. 抑制水声
+  nds_scale_q15(inst->smooth32, (int16_t)FILTER_SMOOTH, (int8_t)0, vecTmp16_1, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_scale_q15(theFilter32, (int16_t)FILTER_SMOOTH_S, (int8_t)0, vecTmp16_2, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_add_q15(vecTmp16_1, vecTmp16_2, inst->smooth32, (uint32_t)HALF_ANAL_BLOCKL);
 #if FSmooth
-    fenergy2 = 0;
+  fenergy2 = 0;
+  for (i = 0; i < HALF_ANAL_BLOCKL; i++)
+  {
+    fenergy2 += (uint64_t)inst->signalPrev32[i];
+  }
+  zeta = (fenergy2 << 15) / fenergy1;
+  if (zeta > ZETA_THR)
+  {
+    zeta = (int32_t)Q15MOD;
+  }
+  if (zeta == (int32_t)Q15MOD)
+  {
+    winLen = 1;
+  }
+  else
+  {
+    winLen = 2 * ((((Q15MOD - (zeta << 15) / ZETA_THR) * PSI) + Q15MOD) >> 15) + 1;
+    smooth = movingAverageCreate(winLen);
     for (i = 0; i < HALF_ANAL_BLOCKL; i++)
     {
-      fenergy2 += (uint64_t)inst->signalPrev32[i];
+      theFilter32[i] = movingAverageNext(smooth, theFilter32[i]);
     }
-    zeta = (fenergy2 << 15) / fenergy1;
-    if (zeta > ZETA_THR)
-    {
-      zeta = (int32_t)Q15MOD;
-    }
-    if (zeta == (int32_t)Q15MOD)
-    {
-      winLen = 1;
-    }
-    else
-    {
-      winLen = 2 * ((((Q15MOD - (zeta << 15) / ZETA_THR) * PSI) + Q15MOD) >> 15) + 1;
-      smooth = movingAverageCreate(winLen);
-      for (i = 0; i < HALF_ANAL_BLOCKL; i++)
-      {
-        theFilter32[i] = movingAverageNext(smooth, theFilter32[i]);
-      }
-      movingAverageFree(smooth);
-      // InnoTalkSmooth_Create(&smooth_inst);
-      // InnoTalkSmooth_InitCore(smooth_inst, winLen);
-      // nds_fir_q15(smooth_inst, theFilter32, theFilter32, HALF_ANAL_BLOCKL);
-    }
-    memcpy(inst->smooth32, theFilter32, HALF_ANAL_BLOCKL * sizeof(int16_t));
+    movingAverageFree(smooth);
+    // InnoTalkSmooth_Create(&smooth_inst);
+    // InnoTalkSmooth_InitCore(smooth_inst, winLen);
+    // nds_fir_q15(smooth_inst, theFilter32, theFilter32, HALF_ANAL_BLOCKL);
+  }
+  memcpy(inst->smooth32, theFilter32, HALF_ANAL_BLOCKL * sizeof(int16_t));
 #endif
 
-    // 8. 增强语音谱
-    nds_mul_q15(inst->smooth32, real16, real16, (uint32_t)HALF_ANAL_BLOCKL);
-    nds_mul_q15(inst->smooth32, imag16, imag16, (uint32_t)HALF_ANAL_BLOCKL);
+  // 8. 增强语音谱
+  nds_mul_q15(inst->smooth32, real16, real16, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_mul_q15(inst->smooth32, imag16, imag16, (uint32_t)HALF_ANAL_BLOCKL);
 
   winDataI[0] = real16[0];
   winDataI[1] = imag16[0];
@@ -709,20 +705,20 @@ int InnoTalkNsx_ProcessCore(void* inst1, short* speechFrame, short* outFrame) {
   }
   nds_shift_q15(winDataO, (int8_t)(-inst->norm), winDataO, (uint32_t)ANAL_BLOCKL_MAX);
 
-    factor32 = Q15MOD;
-    if (inst->blockIndex > 0) {
+  factor32 = Q15MOD;
+  if (inst->blockIndex > 0) {
 	  energyOut = (uint64_t)nds_pwr_q15(winDataO, (uint32_t)ANAL_BLOCKL_MAX);
 	  energyOut = (uint64_t)(energyOut << 30);
 	  fTmp32 = (int32_t)(energyOut / (inst->energyIn + 32768));
 	  gain32 = nds_sqrt_f32((float)fTmp32);
 	  if (gain32 > B_LIM16) {
-		  factor32 = (int32_t)Q15MOD + ((42598 * (gain32 - B_LIM16)) >> 15);
+	    factor32 = (int32_t)Q15MOD + ((42598 * (gain32 - B_LIM16)) >> 15);
 	  }
 	  else {
-		  factor32 = (int32_t)Q15MOD + 2 * (gain32 - B_LIM16);
+	    factor32 = (int32_t)Q15MOD + 2 * (gain32 - B_LIM16);
 	  }
 	  if (gain32 * factor32 > (int64_t)Q30MOD) {
-	      factor32 = (int64_t)Q30MOD / gain32;
+	    factor32 = (int64_t)Q30MOD / gain32;
 	  }
   }
 
@@ -730,7 +726,6 @@ int InnoTalkNsx_ProcessCore(void* inst1, short* speechFrame, short* outFrame) {
   for (i = 0; i < ANAL_BLOCKL_MAX; i++) {
 	  inst->synthesisBuffer[i] += (short)(((int64_t)factor32*(int32_t)kBlocks128w256x[i] * (int32_t)winDataO[i]) >> 30);
   }
-
 
   for (i = 0; i < inst->blockLen; i++) {
 	  dTmp = (short)inst->synthesisBuffer[i];
