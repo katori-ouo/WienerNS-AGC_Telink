@@ -4,11 +4,12 @@
  *  Created on: 2021Äê4ÔÂ26ÈÕ
  *      Author: w
  */
-#include "audio_config.h"
-#include "signal_processing_library.h"
 
 #ifndef SRC_LIB_CODEC_AEC_CORE_TL4_AGC_H_
 #define SRC_LIB_CODEC_AEC_CORE_TL4_AGC_H_
+
+#include "audio_config.h"
+#include "signal_processing_library.h"
 
 #define RXX_BUFFER_LEN  10
 #define AGC_DEFAULT_TARGET_LEVEL 3
@@ -24,7 +25,6 @@
 static const int16_t kInitCheck = 42;
 
 static const int16_t kAvgDecayTime = 250; // frames; < 3000
-
 
 enum
 {
