@@ -167,7 +167,7 @@ int InnoTalkAgc_Sat(short * x, short * y, short framesz, short a)
 			}
 		}
 	}
-    return 0;
+	return 0;
 
 }
 
@@ -591,14 +591,10 @@ void InnoTalkAgc_UpdateAgcThresholds(Agc_t *stt)
 
 }
 
-int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near,
-                      int16_t *out,
-					  InnoTalkAgc_config_t agcConfig)
+int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, InnoTalkAgc_config_t agcConfig)
 {
 
     Agc_t *stt;
-    // int16_t i;
-
     int32_t out_tmp, tmp32;
     int32_t env[10];
     int32_t gains[9];

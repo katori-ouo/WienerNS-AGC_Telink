@@ -266,36 +266,37 @@ int InnoTalkNsx_Create(void **NS_inst)
  * @param fs 采样频率
  * @return int32_t 初始化失败返回-1, 否则返回0
  */
-int32_t InnoTalkNsx_InitCore(void* inst1, uint32_t fs) {
-    NsxInst_t* inst = (NsxInst_t *)inst1;
-    if (inst == NULL) {
-      return -1;
-    }
-    // Initialization of struct
-    inst->fs = fs;
-    inst->blockLen = 128;
-    inst->stages = 8;
-    inst->blockIndex = -1; //frame counter
-    inst->scaleEnergyIn = 0;
-    inst->energyIn = 0;
-    inst->zeroInputSignal = 0;
-    inst->norm = 0;
-    inst->normPrev = 15;
-    inst->overdrive16 = 42598;   // Q15(1.3)
-    inst->denoiseBound16 = 2294; // Q15(0.07)
+int32_t InnoTalkNsx_InitCore(void* inst1, uint32_t fs)
+{
+  NsxInst_t* inst = (NsxInst_t *)inst1;
+  if (inst == NULL) {
+    return -1;
+  }
+  // Initialization of struct
+  inst->fs = fs;
+  inst->blockLen = 128;
+  inst->stages = 8;
+  inst->blockIndex = -1; //frame counter
+  inst->scaleEnergyIn = 0;
+  inst->energyIn = 0;
+  inst->zeroInputSignal = 0;
+  inst->norm = 0;
+  inst->normPrev = 15;
+  inst->overdrive16 = 42598;   // Q15(1.3)
+  inst->denoiseBound16 = 2294; // Q15(0.07)
 
-    nds_set_q15((int16_t)0, inst->analysisBuffer, (uint32_t)ANAL_BLOCKL_MAX);
-    nds_set_q15((int16_t)0, inst->synthesisBuffer, (uint32_t)ANAL_BLOCKL_MAX);
-    nds_set_q15((int16_t)0, inst->fftdata, (uint32_t)(ANAL_BLOCKL_MAX * 2));
-    nds_set_q15((int16_t)0, inst->smooth32, (uint32_t)HALF_ANAL_BLOCKL);
-    nds_set_q31((int32_t)0, inst->pmagnPrev32, (uint32_t)HALF_ANAL_BLOCKL);
-    nds_set_q31((int32_t)0, inst->noisePrev32, (uint32_t)HALF_ANAL_BLOCKL);
-    nds_set_q31((int32_t)0, inst->probPrev32, (uint32_t)HALF_ANAL_BLOCKL);
-    nds_set_q31((int32_t)0, inst->signalPrev32, (uint32_t)HALF_ANAL_BLOCKL);
-    nds_set_q31((int32_t)0, inst->minMagn32, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_set_q15((int16_t)0, inst->analysisBuffer, (uint32_t)ANAL_BLOCKL_MAX);
+  nds_set_q15((int16_t)0, inst->synthesisBuffer, (uint32_t)ANAL_BLOCKL_MAX);
+  nds_set_q15((int16_t)0, inst->fftdata, (uint32_t)(ANAL_BLOCKL_MAX * 2));
+  nds_set_q15((int16_t)0, inst->smooth32, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_set_q31((int32_t)0, inst->pmagnPrev32, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_set_q31((int32_t)0, inst->noisePrev32, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_set_q31((int32_t)0, inst->probPrev32, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_set_q31((int32_t)0, inst->signalPrev32, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_set_q31((int32_t)0, inst->minMagn32, (uint32_t)HALF_ANAL_BLOCKL);
 
-    inst->initFlag = 1;
-    return 0;
+  inst->initFlag = 1;
+  return 0;
 }
 
 #if CUT
