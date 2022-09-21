@@ -79,9 +79,9 @@ void InnoTalkNS16KSampleX(char *szFileIn, char *szFileOut, uint32_t nSample)
 		{
 			if (FRAME_LEN == fread(shInL, sizeof(short), FRAME_LEN, fpIn))
 			{
-				InnoTalkNsx_ProcessCore(pNS_inst, shInL, shOutL);
+				// InnoTalkNsx_ProcessCore(pNS_inst, shInL, shOutL);
 				// InnoTalkAgc_Process(AGC_inst, shTmpL, shOutL, agcConfig);
-				fwrite(shOutL, sizeof(short), FRAME_LEN, fpOut);
+				fwrite(shInL, sizeof(short), FRAME_LEN, fpOut);
 			}
 			else
 			{
