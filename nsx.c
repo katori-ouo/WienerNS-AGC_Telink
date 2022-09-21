@@ -397,7 +397,7 @@ void InnoTalkNsx_DataAnalysis(void *inst1, short* speechFrame)
 	  FFTIOtT[2 * i] = realImag[i];
 	  FFTIOtT[2 * i + 1] = 0;
   }
-  nds_cfft_rd4_q15(FFTIOtT, inst->stages);
+  nds_cfft_rd2_q15(FFTIOtT, inst->stages);
   nds_dup_q15(FFTIOtT, inst->fftdata, (uint32_t)(2 * ANAL_BLOCKL_MAX));
   // nds_shift_q15(FFTIOtT, 1, inst->fftdata, 2 * ANAL_BLOCKL_MAX);
 }
@@ -701,7 +701,7 @@ int InnoTalkNsx_ProcessCore(void* inst1, short* speechFrame, short* outFrame)
 	  winDataI[ANAL_BLOCKL_MAX * 2 - i * 2 + 1] = -imag16[i];
   }
 
-  nds_cifft_rd4_q15(winDataI,inst->stages);
+  nds_cifft_rd2_q15(winDataI,inst->stages);
   for (i = 0; i < ANAL_BLOCKL_MAX; i++)
   {
 	  winDataO[i] = winDataI[i * 2];
