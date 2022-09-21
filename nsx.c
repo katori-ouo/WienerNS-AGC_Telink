@@ -391,6 +391,7 @@ void InnoTalkNsx_DataAnalysis(void *inst1, short* speechFrame)
   }
 
   nds_shift_q15(winData, (int8_t)inst->norm, realImag, (uint32_t)ANAL_BLOCKL_MAX);
+  // nds_shift_q15(winData, 0, realImag, (uint32_t)ANAL_BLOCKL_MAX);
 
   for (i = 0; i < ANAL_BLOCKL_MAX; i++)
   {
@@ -683,8 +684,8 @@ int InnoTalkNsx_ProcessCore(void* inst1, short* speechFrame, short* outFrame)
 #endif
 
   // 8. ÔöÇ¿ÓïÒôÆ×
-  // nds_mul_q15(inst->smooth32, real16, real16, (uint32_t)HALF_ANAL_BLOCKL);
-  // nds_mul_q15(inst->smooth32, imag16, imag16, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_mul_q15(inst->smooth32, real16, real16, (uint32_t)HALF_ANAL_BLOCKL);
+  nds_mul_q15(inst->smooth32, imag16, imag16, (uint32_t)HALF_ANAL_BLOCKL);
 
   winDataI[0] = real16[0];
   winDataI[1] = imag16[0];
