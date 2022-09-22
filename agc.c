@@ -167,7 +167,7 @@ int InnoTalkAgc_Sat(short * x, short * y, short framesz, short a)
 			}
 		}
 	}
-	return 0;
+    return 0;
 
 }
 
@@ -433,7 +433,7 @@ void InnoTalkAgc_InitVad(AgcVad_t *state)
 int InnoTalkAgc_Create(void **agcInst)
 {
 
-    Agc_t *stt = &agcFixed.fs;
+    Agc_t *stt = &agcFixed;
 
 	*agcInst = stt;
 
@@ -591,10 +591,13 @@ void InnoTalkAgc_UpdateAgcThresholds(Agc_t *stt)
 
 }
 
-int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, InnoTalkAgc_config_t agcConfig)
+int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t frame_size,
+                      int16_t *out, InnoTalkAgc_config_t agcConfig)
 {
 
     Agc_t *stt;
+    // int16_t i;
+
     int32_t out_tmp, tmp32;
     int32_t env[10];
     int32_t gains[9];
@@ -603,11 +606,11 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
     int32_t gain32, delta;
     int16_t logratio;//,Record;
     int16_t lower_thr, upper_thr;
-    int16_t zeros, zeros_fast, frac;
+    int16_t zeros, zeros_fast, frac=0;
     int16_t decay;
     int16_t gate, gain_adj;
     int16_t k, n;
-    int16_t L, L2; // samples/subframe
+    int16_t L, L2, subframes; // samples/subframe
 
     stt = (Agc_t *)agcInst;
 
@@ -627,13 +630,14 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
     //////////////WQY start
     // determine number of samples per ms  //JT:定义子帧长度
     L = 16;
+    subframes = frame_size / L;
     L2 = 4;
 
     // TODO(andrew): again, we don't need input and output pointers...
     if (in_near != out)
     {
         // Only needed if they don't already point to the same place.
-        memcpy(out, in_near, 8 * L * sizeof(int16_t));
+        memcpy(out, in_near, subframes * L * sizeof(int16_t));
     }
 
     nrg = 0;
@@ -641,7 +645,7 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
     out1 = out;
     state = &sttd->vadNearend;
     HPstate = state->HPstate;
-    for (subfr = 0; subfr < 8; subfr++)//处理128点（一帧），分8个循环
+    for (subfr = 0; subfr < subframes; subfr++)//处理128点（一帧），分8个循环
     {
         for (k = 0; k < 8; k++)//
         {
@@ -795,7 +799,7 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
 
     // Find max amplitude per sub frame
     // iterate over sub frames
-    for (k = 0; k < 8; k++)//jt：对10个子帧的处理
+    for (k = 0; k < subframes; k++)//jt：对子帧的处理
     {
         // iterate over samples
         max_nrg = 0;
@@ -813,7 +817,7 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
     // Calculate gain per sub frame
     gains[0] = sttd->gain;
 
-    for (k = 0; k < 8; k++)//jt:依旧对子帧进行处理
+    for (k = 0; k < subframes; k++)//jt:依旧对子帧进行处理
     {
         //快慢包络的计算
         // Fast envelope follower  decay time = -131000 / -1000 = 131 (ms)，//jt:此处的131000对应的为2^17
@@ -891,7 +895,7 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
             gain_adj = 0;
         }
 
-        for (k = 0; k < 8; k++)
+        for (k = 0; k < subframes; k++)
         {
             if ((gains[k + 1] - sttd->gainTable[0]) > 8388608)//JT:8388608代表100000000000000000000000
             {
@@ -912,7 +916,7 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
 
     //Record=gate;//stt->vadNearend.stdShortTerm;//gate;
     // Limit gain to avoid overload distortion JT:防止过失真
-    for (k = 0; k < 8; k++)
+    for (k = 0; k < subframes; k++)
     {
         // To prevent wrap around
         zeros = 10;
@@ -939,7 +943,7 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
         }
     }
     // gain reductions should be done 1 ms earlier than gain increases//JT:增益上升要比增益下降迟缓1ms
-    for (k = 1; k < 8; k++)
+    for (k = 1; k < subframes; k++)
     {
        if (gains[k] > gains[k + 1])
        {
@@ -947,7 +951,7 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
         }
     }
     // save start gain for next frame
-    sttd->gain = gains[8];
+    sttd->gain = gains[subframes];
 
 
     // Apply gain
@@ -977,7 +981,7 @@ int InnoTalkAgc_Process(void *agcInst, const int16_t *in_near, int16_t *out, Inn
         gain32 += delta;
     }
     // iterate over subframes//JT：处理之后的9子帧
-    for (k = 1; k < 8; k++)
+    for (k = 1; k < subframes; k++)
     {
         delta = INNOTALK_SPL_LSHIFT_W32(gains[k+1] - gains[k], (4 - L2));
         gain32 = INNOTALK_SPL_LSHIFT_W32(gains[k], 4);
