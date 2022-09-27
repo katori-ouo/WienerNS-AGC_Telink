@@ -98,7 +98,7 @@ void InnoTalkNS16KSampleX(char *szFileIn, char *szFileOut, uint32_t nSample)
 int main()
 {
 	printf("processing...\n");
-	InnoTalkNS16KSampleX("TelinkTest.pcm", "TelinkTest_0920.pcm", (uint32_t)16000);
+	InnoTalkNS16KSampleX("TelinkTest.pcm", "TelinkTest_64.pcm", (uint32_t)16000);
 	printf("end!\n");
 
 	getchar();
